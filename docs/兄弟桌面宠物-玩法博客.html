@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>把同事变成桌面上爬来爬去的「猴子」？这个开源小工具做到了</title>
+<style>
+  :root{
+    --bg:#fbf7f0; --ink:#2b2118; --muted:#8a7d6c; --card:#ffffff;
+    --amber:#f59e0b; --amber-d:#b45309; --leaf:#5fa85f; --pink:#ef7aa3;
+    --line:#ece3d6; --shadow:0 10px 30px rgba(80,60,30,.10);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    background:var(--bg); color:var(--ink); line-height:1.85;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:760px;margin:0 auto;padding:0 20px 80px}
+  /* hero */
+  .hero{
+    background:linear-gradient(135deg,#ffd58a 0%,#ffb347 55%,#f59e0b 100%);
+    border-radius:0 0 36px 36px; padding:64px 24px 56px; text-align:center;
+    box-shadow:var(--shadow); position:relative; overflow:hidden;
+  }
+  .hero::after{
+    content:"🐵"; position:absolute; right:-10px; bottom:-18px; font-size:160px; opacity:.18; transform:rotate(-12deg);
+  }
+  .hero .tag{
+    display:inline-block; background:rgba(255,255,255,.35); color:#6b3e00;
+    font-size:13px; font-weight:700; letter-spacing:.5px; padding:5px 14px; border-radius:999px; margin-bottom:18px;
+  }
+  .hero h1{font-size:34px; line-height:1.3; color:#5b3300; font-weight:800; text-shadow:0 2px 0 rgba(255,255,255,.4)}
+  .hero p{margin-top:14px; color:#7a4a00; font-size:16px}
+  /* sections */
+  h2{font-size:24px; margin:46px 0 18px; display:flex; align-items:center; gap:10px}
+  h2 .emoji{font-size:26px}
+  p.lead{color:var(--muted); font-size:16px}
+  .card{
+    background:var(--card); border:1px solid var(--line); border-radius:18px;
+    padding:20px 22px; margin:16px 0; box-shadow:var(--shadow);
+  }
+  .features{display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:18px}
+  .feat{background:var(--card); border:1px solid var(--line); border-radius:16px; padding:16px 18px; box-shadow:var(--shadow)}
+  .feat .ic{font-size:30px}
+  .feat h3{font-size:16px; margin:6px 0 4px}
+  .feat p{font-size:14px; color:var(--muted)}
+  /* steps */
+  .step{display:flex; gap:16px; align-items:flex-start; margin:18px 0}
+  .step .num{
+    flex:0 0 38px; height:38px; border-radius:50%; background:var(--amber); color:#fff;
+    font-weight:800; display:flex; align-items:center; justify-content:center; font-size:18px;
+    box-shadow:0 6px 14px rgba(245,158,11,.4);
+  }
+  .step .body{flex:1}
+  .step .body b{color:var(--amber-d)}
+  code{background:#f3ece0; border:1px solid var(--line); border-radius:6px; padding:2px 7px; font-size:13.5px; color:var(--amber-d); font-family:"SFMono-Regular",Consolas,monospace}
+  pre{background:#2b2118; color:#ffe9c7; border-radius:12px; padding:16px 18px; overflow:auto; margin:10px 0; font-size:13.5px; line-height:1.7}
+  pre code{background:none; border:none; color:inherit; padding:0}
+  /* egg callouts */
+  .egg{border-left:5px solid var(--pink); background:#fff4f8; border-radius:0 14px 14px 0; padding:16px 20px; margin:16px 0}
+  .egg.green{border-left-color:var(--leaf); background:#f1faf1}
+  .egg h3{font-size:17px; margin-bottom:6px}
+  .egg p{color:#5a5048; font-size:15px}
+  /* note */
+  .note{background:#fff8ea; border:1px dashed #f0c869; border-radius:14px; padding:16px 20px; margin:22px 0; font-size:14.5px; color:#7a5a1e}
+  .note b{color:var(--amber-d)}
+  .footer{text-align:center; color:var(--muted); font-size:13.5px; margin-top:50px; padding-top:24px; border-top:1px solid var(--line)}
+  a{color:var(--amber-d); text-decoration:none; font-weight:600}
+  @media(max-width:560px){ .features{grid-template-columns:1fr} .hero h1{font-size:26px} }
+</style>
+</head>
+<body>
+
+  <header class="hero">
+    <span class="tag">开源整活 · 桌面摸鱼利器</span>
+    <h1>把同事变成桌面上<br/>爬来爬去的「猴子」？</h1>
+    <p>这个叫 <b>Brother Pet</b> 的小工具，真的做到了 🐵</p>
+  </header>
+
+  <div class="wrap">
+
+    <p class="lead" style="margin-top:40px">
+      想象一下：你正盯着 Excel 加班，屏幕角落里突然爬出一只「猴子」——长着你好哥们的脸，戴着他那副黑框眼镜，正沿着浏览器窗口的边沿往上爬。点一下右键，它还会理直气壮地弹出对话框：「叫爸爸！」。
+    </p>
+    <p class="lead">
+      这不是 P 图，也不是动画短片。这是一个能一键打包、发给朋友双击就跑的<b>桌面宠物生成器</b>。今天这篇就带你从「是什么」玩到「怎么整活」。
+    </p>
+
+    <h2><span class="emoji">🎮</span>它到底能干嘛</h2>
+    <div class="features">
+      <div class="feat"><div class="ic">🐵</div><h3>多宠物全屏爬行</h3><p>透明置顶的小窗，多个「猴子」在整个屏幕上自由爬行、跳跃、玩耍。</p></div>
+      <div class="feat"><div class="ic">🪟</div><h3>窗口边缘即平台</h3><p>自动扫描桌面窗口，把每个窗口顶面当可站 / 可攀爬的平台，宠物会顺边沿爬上去。</p></div>
+      <div class="feat"><div class="ic">🎞️</div><h3>支持 GIF 动图</h3><p>每个动作都能用 GIF，运行时按原生节奏逐帧播放，比静态图生动太多。</p></div>
+      <div class="feat"><div class="ic">🖱️</div><h3>右键「叫爸爸」</h3><p>点一下，最近的宠物弹对话框，随机甩一句台词，整活效果拉满。</p></div>
+    </div>
+
+    <h2><span class="emoji">🚀</span>三步上手，零代码</h2>
+
+    <div class="step">
+      <div class="num">1</div>
+      <div class="body"><b>启动前后端。</b>后端默认跑在 <code>8996</code>，前端跑在 <code>5173</code>：
+<pre><code>cd backend &amp;&amp; python -m uvicorn server:app --port 8996
+cd frontend &amp;&amp; npm run dev</code></pre>
+        然后浏览器打开 <code>http://localhost:5173</code>。
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="num">2</div>
+      <div class="body"><b>选素材、调参数。</b>给「爬行 / 攀爬 / 发呆 / 开心」四个动作分别挑图——示例里已经备好 AI 生成的 GIF（爬行 / 攀爬 / 开心 / 跳跃），直接选就能用；也可以上传自己的图。选 GIF 时右侧会<b>实时预览动画</b>。再填几句「叫爸爸」台词和投喂文案。</div>
+    </div>
+
+    <div class="step">
+      <div class="num">3</div>
+      <div class="body"><b>一键生成 exe。</b>指定输出路径 → 点「生成 exe」→ 等进度条走完 → 下载 → 双击运行。搞定，你的朋友已经在屏幕上爬了。</div>
+    </div>
+
+    <h2><span class="emoji">🥚</span>两个隐藏彩蛋</h2>
+
+    <div class="egg">
+      <h3>💩 右键「投喂」</h3>
+      <p>屏幕顶端会掉下几坨 💩 砸向宠物，被砸中的宠物立刻切换成开心蹦跶动画，并弹出「感谢爸爸投喂！」。摸鱼时的快乐，往往就是这么朴实无华。</p>
+    </div>
+
+    <div class="egg green">
+      <h3>🗣️ 右键「叫爸爸」</h3>
+      <p>离鼠标最近的宠物会弹对话框，从你预设的台词池里随机抽一句——「叫爸爸！」「爸爸抱抱~」随你发挥。建议把公司群里的经典语录塞进去。</p>
+    </div>
+
+    <h2><span class="emoji">📦</span>发给朋友？一行命令都不用</h2>
+    <div class="card">
+      <p>生成的 exe 是 <b>PyInstaller 单文件</b>：所有素材、配置、Python 运行环境全都内联在里面。直接把 <code>BrotherPet.exe</code> 发到别的 Windows 电脑，对方<b>双击就能跑</b>——不用装 Python，不用带文件夹，也不用联网。</p>
+    </div>
+
+    <div class="note">
+      <b>温馨提示：</b><br/>
+      • 仅支持 <b>Windows 10 / 11</b>（依赖 Win32 API 与 tkinter 置顶窗口）。<br/>
+      • 首次运行可能被 Defender / 管家误报拦截，点「仍要运行」即可——这是 PyInstaller 打包的通病，不是病毒。<br/>
+      • 第一次启动会慢几秒（要先解包到临时目录），之后就丝滑了。
+    </div>
+
+    <h2><span class="emoji">🧩</span>想玩更花？进阶思路</h2>
+    <p class="lead">不想只用示例素材？有几个骚操作：</p>
+    <div class="card">
+      <p>• 自己拍一段朋友爬行的视频，抽帧做成 GIF 丢进去，宠物就是他本人真·在爬。<br/>
+      • 用 <code>generated-gifs/</code> 里 AI 生成的 61 帧高清 GIF（爬行 / 攀爬 / 开心 / 跳跃）当动作素材。<br/>
+      • 直接改 <code>config.json</code> 调爬行速度、跳跃频率、发呆概率，调出最欠揍的节奏。</p>
+    </div>
+
+    <div class="footer">
+      Brother Pet · 一个把正经同事变成桌面猴子的开源小项目<br/>
+      上传照片 → 选素材 / 调参数 → 一键生成 exe → 发给朋友双击即玩
+    </div>
+
+  </div>
+</body>
+</html>
