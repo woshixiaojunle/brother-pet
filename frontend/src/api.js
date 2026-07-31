@@ -28,3 +28,7 @@ export async function getTask(id) {
 export function downloadUrl(id) {
   return `${BASE}/api/download/${id}`
 }
+
+export function getSampleUrl(name) {
+  return `${BASE}/api/sample/${encodeURIComponent(name)}`
+}

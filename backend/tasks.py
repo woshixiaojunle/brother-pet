@@ -23,6 +23,7 @@ from generators.openai_gen import OpenAIGenerator
 BACKEND_DIR = Path(__file__).parent
 PET_RUNTIME = BACKEND_DIR / 'pet_runtime.py'
 SAMPLE_ASSETS = BACKEND_DIR.parent / 'assets'        # 项目级示例素材
+GEN_GIFS = BACKEND_DIR.parent / 'generated-gifs'     # AI 生成的 GIF 动画素材
 GEN_ROOT = BACKEND_DIR.parent / 'gen_tasks'          # 任务工作区
 
 TASKS = {}  # task_id -> BuildTask
@@ -43,12 +44,13 @@ class BuildTask:
 
 
 def _make_generator(name: str):
+    search = [str(SAMPLE_ASSETS), str(GEN_GIFS)]
     if name == 'openai':
         try:
-            return OpenAIGenerator(str(SAMPLE_ASSETS))
+            return OpenAIGenerator(search)
         except Exception:
-            return LocalAssetGenerator(str(SAMPLE_ASSETS))
-    return LocalAssetGenerator(str(SAMPLE_ASSETS))
+            return LocalAssetGenerator(search)
+    return LocalAssetGenerator(search)
 
 
 def build_exe(task_id: str, config: dict, output_path: str,
@@ -80,8 +82,13 @@ def build_exe(task_id: str, config: dict, output_path: str,
                 assets = generator.prepare_assets(pc, str(assets_dir))
             except Exception as e:
                 task.log(f'[warn] 生成器失败，回退 local: {e}')
-                assets = LocalAssetGenerator(str(SAMPLE_ASSETS)).prepare_assets(pc, str(assets_dir))
+                assets = LocalAssetGenerator([str(SAMPLE_ASSETS), str(GEN_GIFS)]).prepare_assets(pc, str(assets_dir))
             pc['assets'] = assets
+            if not assets:
+                task.log(
+                    f'[warn] 宠物「{pc.get("name")}」未匹配到任何素材，将不会出现在 exe 中！'
+                    f'请检查所选示例素材名是否存在、或上传文件是否成功。'
+                )
             pets_out.append(pc)
         config['pets'] = pets_out
 
@@ -116,7 +123,9 @@ def build_exe(task_id: str, config: dict, output_path: str,
             '--workpath', str(task.dir / 'build'),
             '--specpath', str(task.dir),
             '--add-data', f'assets{sep}assets',
-            '--add-data', f'config.json{sep}config.json',
+            # 注意：config.json 是「文件」，目标目录必须是根目录 '.'，
+            # 若写成 'config.json' 会被当成目录，导致打包成 config.json/config.json 而读不到
+            '--add-data', f'config.json{sep}.',
             'pet_runtime.py',
         ]
         task.log('开始打包（PyInstaller）...')

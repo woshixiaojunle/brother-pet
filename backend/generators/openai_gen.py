@@ -38,8 +38,10 @@ PROMPTS = {
 class OpenAIGenerator(ImageGenerator):
     name = 'openai'
 
-    def __init__(self, sample_dir: str):
-        self.sample_dir = sample_dir
+    def __init__(self, search_dirs):
+        if isinstance(search_dirs, str):
+            search_dirs = [search_dirs]
+        self.sample_dir = search_dirs[0] if search_dirs else ''
         self.key = os.environ.get('OPENAI_API_KEY')
         self.base_url = os.environ.get('OPENAI_BASE_URL')
         self.client = OpenAI(api_key=self.key, base_url=self.base_url) if (OpenAI and self.key) else None

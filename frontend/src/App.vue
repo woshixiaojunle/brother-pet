@@ -2,7 +2,7 @@
   <div class="page">
     <header class="hero">
       <h1>🐵 Brother Pet 生成器</h1>
-      <p>设置动图与参数，一键打包成桌面宠物 exe</p>
+      <p>设置动图（支持 PNG / GIF）与参数，一键打包成桌面宠物 exe</p>
     </header>
 
     <section class="panel">
@@ -131,6 +131,15 @@ async function submit() {
     feed_text: feedText.value,
     output_path: outputPath.value,
     generator: generator.value,
+  }
+  // 校验：每只宠物至少选了「爬行/攀爬/发呆/开心」中的任意一个素材，否则拦截
+  for (const p of pets.value) {
+    const a = p.assets || {}
+    const has = a.crawl || a.climb || a.sit || a.happy
+    if (!has) {
+      alert(`宠物「${p.name || '未命名'}」还没有选素材！\n请至少选择一个动作（示例或上传）再生成，否则 exe 会提示「未加载到宠物素材」。`)
+      return
+    }
   }
   const files = []
   for (const p of pets.value) {

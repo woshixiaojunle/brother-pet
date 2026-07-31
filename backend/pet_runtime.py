@@ -12,61 +12,130 @@ import time
 import os
 import sys
 import json
+import traceback
 import ctypes
 from ctypes import wintypes
-from PIL import Image, ImageTk
+from PIL import Image, ImageTk, ImageSequence
 
-# ─── Win32 API 常量 ──────────────────────────────────────────────
+
+# ─── GIF / 素材工具 ──────────────────────────────────────────────
+def _fit_to_canvas(img, W, H):
+    """等比缩放并居中贴到 W×H 透明画布，避免拉伸变形，保留透明通道。"""
+    img = img.convert('RGBA')
+    iw, ih = img.size
+    if iw == 0 or ih == 0:
+        return Image.new('RGBA', (W, H), (0, 0, 0, 0))
+    scale = min(W / iw, H / ih)
+    nw = max(1, int(iw * scale))
+    nh = max(1, int(ih * scale))
+    img = img.resize((nw, nh), Image.Resampling.LANCZOS)
+    canvas = Image.new('RGBA', (W, H), (0, 0, 0, 0))
+    canvas.paste(img, ((W - nw) // 2, (H - nh) // 2), img)
+    return canvas
+
+
+def _load_gif(path, W, H):
+    """读取 GIF 全部帧并按画布等比适配，返回 (frames, durations_seconds)。
+
+    假定为全帧精灵图（本项目生成的 GIF 均为整帧），逐帧迭代即可；
+    透明通道通过 convert('RGBA') 保留。
+    """
+    frames, durations = [], []
+    try:
+        with Image.open(path) as im:
+            for f in ImageSequence.Iterator(im):
+                try:
+                    fr = f.copy().convert('RGBA')
+                except Exception:
+                    continue
+                frames.append(_fit_to_canvas(fr, W, H))
+                dur = f.info.get('duration') or 80
+                durations.append(min(0.15, max(0.03, dur / 1000.0)))
+    except Exception as e:
+        print(f'[WARN] GIF 读取失败 {path}: {e}')
+    return frames, durations
+
+# ─── 可视化报错：让 windowed exe 不再静默崩溃 ────────────────
+def _show_error(title, msg):
+    # 1) 写日志到 exe 同级目录，方便排查
+    try:
+        base = os.path.dirname(os.path.abspath(sys.executable)) \
+            if getattr(sys, 'frozen', False) else os.getcwd()
+        with open(os.path.join(base, 'brother_pet_crash.log'), 'w', encoding='utf-8') as f:
+            f.write(msg)
+    except Exception:
+        pass
+    # 2) 弹窗提示（可能已无 GUI，失败则忽略）
+    try:
+        r = tk.Tk()
+        r.withdraw()
+        from tkinter import messagebox
+        messagebox.showerror(title, msg[-4000:])
+        r.destroy()
+    except Exception:
+        pass
+
+
+def _global_excepthook(exc_type, exc_val, exc_tb):
+    _show_error('BrotherPet 运行错误', ''.join(traceback.format_exception(exc_type, exc_val, exc_tb)))
+
+
+sys.excepthook = _global_excepthook
+
+
+# ─── Win32 API 常量（仅用于窗口枚举，样式交给 tkinter 原生处理）──
 user32 = ctypes.windll.user32
-gdi32 = ctypes.windll.gdi32
-
-GWL_EXSTYLE = -20
-WS_EX_LAYERED = 0x80000
-WS_EX_TRANSPARENT = 0x20
-WS_EX_TOOLWINDOW = 0x80
-WS_EX_TOPMOST = 0x8
-WS_EX_NOACTIVATE = 0x08000000
-
-LWA_ALPHA = 0x2
-LWA_COLORKEY = 0x1
 
 WNDENUMPROC = ctypes.WINFUNCTYPE(
     ctypes.c_bool,
     wintypes.HWND,
     wintypes.LPARAM,
 )
+# 正确声明 64 位参数/返回类型，避免句柄被截断
+user32.EnumWindows.argtypes = [WNDENUMPROC, wintypes.LPARAM]
+user32.EnumWindows.restype = wintypes.BOOL
+user32.IsWindowVisible.argtypes = [wintypes.HWND]
+user32.IsWindowVisible.restype = wintypes.BOOL
+user32.IsIconic.argtypes = [wintypes.HWND]
+user32.IsIconic.restype = wintypes.BOOL
+user32.GetWindowRect.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.RECT)]
+user32.GetWindowRect.restype = wintypes.BOOL
+user32.GetClassNameW.argtypes = [wintypes.HWND, ctypes.c_wchar_p, ctypes.c_int]
+user32.GetClassNameW.restype = ctypes.c_int
 
 
 # ─── 获取屏幕上其他窗口的矩形区域 ───────────────────────────────
 def get_visible_windows_rects(exclude_hwnd=None):
     """获取屏幕上所有可见窗口的矩形区域（排除自身和任务栏等系统窗口）"""
     rects = []
-    hwnds = []
 
     def enum_callback(hwnd, lParam):
-        if hwnd == exclude_hwnd:
-            return True
-        if not user32.IsWindowVisible(hwnd):
-            return True
-        if user32.IsIconic(hwnd):
-            return True
-        rect = wintypes.RECT()
-        user32.GetWindowRect(hwnd, ctypes.byref(rect))
-        width = rect.right - rect.left
-        height = rect.bottom - rect.top
-        if width < 50 or height < 50:
-            return True
-        buf = ctypes.create_unicode_buffer(256)
-        user32.GetClassNameW(hwnd, buf, 256)
-        classname = buf.value
-        skip_classes = {
-            'Shell_TrayWnd', 'WorkerW', 'Progman', 'Button',
-            'SysListView32', 'IME', 'Chrome_WidgetWin_1', 'MozillaWindowClass',
-        }
-        if classname in skip_classes:
-            return True
-        rects.append((rect.left, rect.top, rect.right, rect.bottom))
-        hwnds.append(hwnd)
+        try:
+            if exclude_hwnd is not None and hwnd == exclude_hwnd:
+                return True
+            if not user32.IsWindowVisible(hwnd):
+                return True
+            if user32.IsIconic(hwnd):
+                return True
+            rect = wintypes.RECT()
+            if not user32.GetWindowRect(hwnd, ctypes.byref(rect)):
+                return True
+            width = rect.right - rect.left
+            height = rect.bottom - rect.top
+            if width < 50 or height < 50:
+                return True
+            buf = ctypes.create_unicode_buffer(256)
+            user32.GetClassNameW(hwnd, buf, 256)
+            classname = buf.value
+            skip_classes = {
+                'Shell_TrayWnd', 'WorkerW', 'Progman', 'Button',
+                'SysListView32', 'IME', 'Chrome_WidgetWin_1', 'MozillaWindowClass',
+            }
+            if classname in skip_classes:
+                return True
+            rects.append((rect.left, rect.top, rect.right, rect.bottom))
+        except Exception:
+            pass
         return True
 
     callback = WNDENUMPROC(enum_callback)
@@ -116,6 +185,10 @@ class Pet:
         self.crawl_speed = crawl_speed
         self.jump_chance = jump_chance
         self.sit_chance = sit_chance
+        # GIF 帧时长（仅当素材为 GIF 时由运行时填充），用于按原生节奏播放
+        self.frame_durations = None
+        self._frame_accum = 0.0
+        self._frame_tick = 0
 
     @property
     def current_frames(self):
@@ -247,10 +320,21 @@ class Pet:
 
     def _advance_frame(self):
         frames = self.current_frames
-        if len(frames) > 1:
-            speed = max(3, self.crawl_speed // 2) if self.state == self.STATE_HAPPY else self.crawl_speed
-            if int(time.time() * speed) % speed == 0:
+        if len(frames) <= 1:
+            return
+        # GIF：按原生帧时长播放（更顺滑、保留设计师设定的节奏）
+        if self.frame_durations and self.state in self.frame_durations:
+            dur = self.frame_durations[self.state]
+            self._frame_accum += 0.016
+            cur = dur[self.frame_index % len(dur)]
+            if self._frame_accum >= cur:
+                self._frame_accum = 0.0
                 self.frame_index = (self.frame_index + 1) % len(frames)
+            return
+        # 程序化帧：沿用原有节奏
+        speed = max(3, self.crawl_speed // 2) if self.state == self.STATE_HAPPY else self.crawl_speed
+        if int(time.time() * speed) % speed == 0:
+            self.frame_index = (self.frame_index + 1) % len(frames)
 
     # ── 程序化动画：单帧 → 生动多帧循环 ──
     @staticmethod
@@ -354,6 +438,7 @@ class Pet:
             return
         if self.dialog_id:
             self.canvas.delete(self.dialog_id)
+            self.dialog_id = None
         cx = self.x + self.PET_W / 2
         cy = self.y - 15
         bubble_w = max(len(self.dialog_text) * 14 + 30, 80)
@@ -453,16 +538,14 @@ class BrotherPetApp:
         self.root = tk.Tk()
         self.screen_w = self.root.winfo_screenwidth()
         self.screen_h = self.root.winfo_screenheight()
+        self._hwnd = self.root.winfo_id()
 
+        # 无边框 + 透明背景（颜色键 #000001）。
+        # tkinter 的 -transparentcolor 底层用 WS_EX_LAYERED + 颜色键，
+        # 天然实现「背景点击穿透、宠物本体可点击」，无需手改 Win32 样式。
         self.root.overrideredirect(True)
         self.root.attributes('-transparentcolor', '#000001')
         self.root.attributes('-topmost', True)
-
-        hwnd = ctypes.windll.user32.GetParent(self.root.winfo_id())
-        style = user32.GetWindowLongPtrW(hwnd, GWL_EXSTYLE)
-        style |= WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_NOACTIVATE
-        user32.SetWindowLongPtrW(hwnd, GWL_EXSTYLE, style)
-
         self.root.geometry(f'{self.screen_w}x{self.screen_h}+0+0')
         self.root.configure(bg='#000001')
 
@@ -493,7 +576,6 @@ class BrotherPetApp:
         if getattr(sys, 'executable', None):
             candidates.append(os.path.dirname(os.path.abspath(sys.executable)))
         candidates.append(os.getcwd())
-        # 去重并保持顺序
         seen, out = set(), []
         for c in candidates:
             if c and c not in seen:
@@ -508,6 +590,11 @@ class BrotherPetApp:
             p = os.path.join(d, 'config.json')
             if os.path.exists(p):
                 cfg_path = p
+                break
+            # 兼容旧版打包瑕疵：config.json 被错误地当作目录嵌套
+            p2 = os.path.join(d, 'config.json', 'config.json')
+            if os.path.exists(p2):
+                cfg_path = p2
                 break
         if cfg_path:
             try:
@@ -537,15 +624,23 @@ class BrotherPetApp:
         for idx, pc in enumerate(pets_cfg):
             assets = pc.get('assets', {})
             frames = {}
+            frame_durations = {}
             for st in ['crawl', 'climb', 'sit', 'happy']:
                 fn = assets.get(st) or pc.get(st)
                 if not fn:
                     continue
-                base = self._load_image(os.path.join(self.assets_dir, fn))
-                n = (pc.get('frames', {}) or {}).get(st, 6 if st != 'sit' else 4)
-                variants = Pet._gen_variants(base, W, H, st, n)
-                if variants:
-                    frames[st] = variants
+                full = os.path.join(self.assets_dir, fn)
+                if fn.lower().endswith('.gif'):
+                    gif_frames, gif_durs = _load_gif(full, W, H)
+                    if gif_frames:
+                        frames[st] = gif_frames
+                        frame_durations[st] = gif_durs
+                else:
+                    base = self._load_image(full)
+                    n = (pc.get('frames', {}) or {}).get(st, 6 if st != 'sit' else 4)
+                    variants = Pet._gen_variants(base, W, H, st, n)
+                    if variants:
+                        frames[st] = variants
             if not frames:
                 continue
             start_x = pc.get('start_x', int(self.screen_w * (idx + 1) / (len(pets_cfg) + 1)))
@@ -557,7 +652,33 @@ class BrotherPetApp:
                 jump_chance=pc.get('jump_chance', self.jump_chance),
                 sit_chance=pc.get('sit_chance', self.sit_chance),
             )
+            pet.frame_durations = frame_durations if frame_durations else None
             self.pets.append(pet)
+
+    def _write_diag(self):
+        """未加载到宠物时，把诊断信息写到 exe 同级目录，便于排查。"""
+        try:
+            base = os.path.dirname(os.path.abspath(sys.executable)) \
+                if getattr(sys, 'frozen', False) else os.getcwd()
+            lines = []
+            lines.append(f'frozen={getattr(sys, "frozen", False)}')
+            lines.append(f'_MEIPASS={getattr(sys, "_MEIPASS", None)}')
+            lines.append(f'base_dir candidates={self._base_dir()}')
+            lines.append(f'assets_dir={self.assets_dir} exists={os.path.isdir(self.assets_dir)}')
+            try:
+                lines.append(f'assets_dir contents={sorted(os.listdir(self.assets_dir))}')
+            except Exception as e:
+                lines.append(f'list assets_dir failed: {e}')
+            lines.append(f'config pets count={len(self.config.get("pets", []))}')
+            for i, pc in enumerate(self.config.get('pets', [])):
+                assets = pc.get('assets', {})
+                for st, fn in assets.items():
+                    p = os.path.join(self.assets_dir, fn) if fn else None
+                    lines.append(f'  pet{i + 1}.{st}: {fn} -> exists={os.path.exists(p) if p else "n/a"}')
+            with open(os.path.join(base, 'brother_pet_diag.log'), 'w', encoding='utf-8') as f:
+                f.write('\n'.join(lines))
+        except Exception:
+            pass
 
     def _default_pets_cfg(self):
         return [
@@ -602,29 +723,38 @@ class BrotherPetApp:
             self.poops.append(poop)
 
     def _refresh_window_rects(self):
-        if hasattr(self, '_hwnd'):
-            self.window_rects = get_visible_windows_rects(exclude_hwnd=self._hwnd)
-        else:
-            self.window_rects = get_visible_windows_rects()
+        self.window_rects = get_visible_windows_rects(exclude_hwnd=self._hwnd)
         if self.running:
             self.root.after(2000, self._refresh_window_rects)
 
     def _game_loop(self):
         if not self.running:
             return
-        self.canvas.delete('all')
-        for pet in self.pets:
-            pet.update(self.screen_w, self.screen_h, self.window_rects)
-            pet.draw()
-        active_poops = []
-        for poop in self.poops:
-            poop.update()
-            poop.draw()
-            if poop.active:
-                active_poops.append(poop)
-        self.poops = active_poops
-        if not hasattr(self, '_hwnd'):
-            self._hwnd = ctypes.windll.user32.GetParent(self.root.winfo_id())
+        try:
+            self.canvas.delete('all')
+            if not self.pets:
+                self._write_diag()
+                self.canvas.create_text(
+                    self.screen_w // 2, self.screen_h // 2,
+                    text='\u672a\u52a0\u8f7d\u5230\u5ba0\u7269\u7d20\u6750\n\u8bf7\u68c0\u67e5 assets \u76ee\u5f55\u4e0e config.json',
+                    fill='#ff5555', font=('Microsoft YaHei', 16, 'bold'),
+                    anchor='center', justify='center'
+                )
+            for pet in self.pets:
+                pet.update(self.screen_w, self.screen_h, self.window_rects)
+                pet.draw()
+            active_poops = []
+            for poop in self.poops:
+                poop.update()
+                poop.draw()
+                if poop.active:
+                    active_poops.append(poop)
+            self.poops = active_poops
+        except Exception as e:
+            self.running = False
+            _show_error('BrotherPet \u8fd0\u884c\u9519\u8bef',
+                        ''.join(traceback.format_exception(type(e), e, e.__traceback__)))
+            return
         self.root.after(16, self._game_loop)
 
     def _quit(self):
@@ -636,5 +766,9 @@ class BrotherPetApp:
 
 
 if __name__ == '__main__':
-    app = BrotherPetApp()
-    app.run()
+    try:
+        app = BrotherPetApp()
+        app.run()
+    except Exception as e:
+        _show_error('BrotherPet \u542f\u52a8\u5931\u8d25',
+                    ''.join(traceback.format_exception(type(e), e, e.__traceback__)))

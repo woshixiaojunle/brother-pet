@@ -25,6 +25,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from tasks import TASKS, start_build
 
 SAMPLE_ASSETS = Path(__file__).parent.parent / 'assets'
+GEN_GIFS = Path(__file__).parent.parent / 'generated-gifs'
+SAMPLE_DIRS = [SAMPLE_ASSETS, GEN_GIFS]
 
 app = FastAPI(title='Brother Pet Generator')
 app.add_middleware(
@@ -40,14 +42,32 @@ def health():
 
 @app.get('/api/samples')
 def list_samples():
-    """列出示例素材目录中的文件，供前端「用示例素材」下拉选择。"""
-    if not SAMPLE_ASSETS.exists():
-        return {'files': []}
-    files = sorted(
-        f.name for f in SAMPLE_ASSETS.iterdir()
-        if f.suffix.lower() in ('.png', '.jpg', '.jpeg', '.gif', '.webp')
-    )
+    """列出示例素材目录中的文件，供前端「用示例素材」下拉选择（含 assets/ 与 generated-gifs/）。"""
+    files = []
+    seen = set()
+    for d in SAMPLE_DIRS:
+        if not d.exists():
+            continue
+        for f in sorted(d.iterdir()):
+            if f.suffix.lower() in ('.png', '.jpg', '.jpeg', '.gif', '.webp'):
+                if f.name not in seen:
+                    seen.add(f.name)
+                    files.append(f.name)
     return {'files': files}
+
+
+@app.get('/api/sample/{filename}')
+def get_sample(filename: str):
+    """返回某个示例素材文件本体（用于前端预览，支持 GIF 动画预览）。"""
+    from urllib.parse import unquote
+    filename = unquote(filename)
+    if '..' in filename or filename.startswith('/') or '\\' in filename:
+        raise HTTPException(status_code=400, detail='非法文件名')
+    for d in SAMPLE_DIRS:
+        p = d / filename
+        if p.exists() and p.is_file():
+            return FileResponse(str(p))
+    raise HTTPException(status_code=404, detail='素材不存在')
 
 
 @app.post('/api/generate')

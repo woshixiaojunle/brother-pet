@@ -6,6 +6,14 @@
 *.ico
 *.bmp
 *.webp
+*.mp4
+*.webm
+*.mov
+
+# ── AI 生成的视频素材（本地产物，不入库）──
+generated-videos/
+# ── 前端临时构建校验目录 ──
+frontend/dist_verify/
 
 # ── Python 缓存 / 构建产物 ──
 __pycache__/

@@ -12,8 +12,10 @@ from .base import ImageGenerator
 class LocalAssetGenerator(ImageGenerator):
     name = 'local'
 
-    def __init__(self, sample_dir: str):
-        self.sample_dir = sample_dir
+    def __init__(self, search_dirs):
+        if isinstance(search_dirs, str):
+            search_dirs = [search_dirs]
+        self.search_dirs = [d for d in search_dirs if d]
 
     def prepare_assets(self, pet_cfg: dict, assets_dir: str) -> dict:
         result = {}
@@ -26,9 +28,14 @@ class LocalAssetGenerator(ImageGenerator):
             if os.path.exists(dst):
                 result[state] = fname
                 continue
-            # 否则从示例素材目录复制
-            src = os.path.join(self.sample_dir, fname)
-            if os.path.exists(src):
+            # 否则从搜索目录复制（支持 assets/ 与 generated-gifs/，含 GIF）
+            src = None
+            for d in self.search_dirs:
+                cand = os.path.join(d, fname)
+                if os.path.exists(cand):
+                    src = cand
+                    break
+            if src:
                 shutil.copy(src, dst)
                 result[state] = fname
             else:
