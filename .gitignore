@@ -1,0 +1,37 @@
+# ── 图片 / 媒体资源（按需求不提交）──
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.ico
+*.bmp
+*.webp
+
+# ── Python 缓存 / 构建产物 ──
+__pycache__/
+*.pyc
+*.spec
+build/
+build_v2/
+build_v3/
+dist/
+
+# ── 生成任务工作区（含自动生成的 exe 与素材副本）──
+gen_tasks/
+
+# ── 后端日志 / 临时测试产物 ──
+backend/*.log
+backend/_cfg_test.json
+
+# ── 前端依赖 / 构建 ──
+node_modules/
+frontend/dist/
+
+# ── 虚拟环境 / 工具 ──
+.venv/
+envs/
+.venv
+
+# ── IDE / 工具目录 ──
+.idea/
+.workbuddy/

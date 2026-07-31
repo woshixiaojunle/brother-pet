@@ -1,0 +1,7 @@
+fastapi>=0.110
+uvicorn[standard]>=0.27
+python-multipart>=0.0.9
+pillow>=10.0
+pyinstaller>=6.0
+# optional: uncomment to enable OpenAI image generation
+# openai>=1.0
